@@ -1,123 +1,111 @@
-const cells = document.querySelectorAll('.cell');
-const messageElement = document.getElementById('message');
-const resetButton = document.getElementById('resetButton');
-const bestTimesElement = document.getElementById('bestTimes');
+// script.js
 
-let board = ['', '', '', '', '', '', '', '', ''];
-let currentPlayer = 'X';
-let gameActive = true;
+const board = document.querySelectorAll('.cell');
+let playerTurn = true;
+let gameOver = false;
 let startTime;
-let bestTimes = JSON.parse(localStorage.getItem('bestTimes')) || [];
+const bestTimesList = document.getElementById('times-list');
 
-resetButton.addEventListener('click', resetGame);
+// Inicialización del juego y eventos
+board.forEach(cell => cell.addEventListener('click', handlePlayerMove));
+window.addEventListener('load', loadBestTimes);
 
-cells.forEach((cell, index) => {
-    cell.addEventListener('click', () => handleCellClick(cell, index));
-});
-
-function handleCellClick(cell, index) {
-    if (board[index] === '' && gameActive) {
-        if (!startTime) {
-            startTime = new Date();
-        }
-        board[index] = currentPlayer;
-        cell.textContent = currentPlayer;
-        cell.classList.add(currentPlayer);
-        checkWinner();
-        currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-        if (currentPlayer === 'O') {
-            setTimeout(computerMove, 500); 
-        }
+// Función de movimiento del jugador
+function handlePlayerMove(event) {
+    if (gameOver || !playerTurn) return;
+    
+    const cell = event.target;
+    cell.textContent = 'X';
+    cell.classList.add('clicked');
+    playerTurn = false;
+    
+    if (!startTime) startTime = Date.now();
+    
+    if (checkWinner('X')) {
+        endGame('Jugador');
+    } else if (isBoardFull()) {
+        endGame('Empate');
+    } else {
+        setTimeout(handleComputerMove, 500);
     }
 }
 
-function computerMove() {
-    let emptyCells = board.map((value, index) => value === '' ? index : null).filter(v => v !== null);
-    if (emptyCells.length > 0 && gameActive) {
-        let randomIndex = emptyCells[Math.floor(Math.random() * emptyCells.length)];
-        board[randomIndex] = 'O';
-        let cell = cells[randomIndex];
-        cell.textContent = 'O';
-        cell.classList.add('O');
-        checkWinner();
-        currentPlayer = 'X';
+// Movimiento aleatorio de la computadora
+function handleComputerMove() {
+    if (gameOver) return;
+
+    let availableCells = Array.from(board).filter(cell => !cell.textContent);
+    let randomCell = availableCells[Math.floor(Math.random() * availableCells.length)];
+    randomCell.textContent = 'O';
+    randomCell.classList.add('clicked');
+
+    if (checkWinner('O')) {
+        endGame('Computadora');
+    } else if (isBoardFull()) {
+        endGame('Empate');
+    } else {
+        playerTurn = true;
     }
 }
 
-function checkWinner() {
+// Verificación de ganador
+function checkWinner(mark) {
     const winningCombinations = [
-        [0, 1, 2],
-        [3, 4, 5],
-        [6, 7, 8],
-        [0, 3, 6],
-        [1, 4, 7],
-        [2, 5, 8],
-        [0, 4, 8],
-        [2, 4, 6],
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6]
     ];
-
-    let roundWon = false;
-    for (let i = 0; i < winningCombinations.length; i++) {
-        const [a, b, c] = winningCombinations[i];
-        if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-            roundWon = true;
-            break;
-        }
-    }
-
-    if (roundWon) {
-        gameActive = false;
-        const endTime = new Date();
-        const timeElapsed = ((endTime - startTime) / 1000).toFixed(2);
-        messageElement.textContent = `¡Ganaste en ${timeElapsed} segundos!`;
-        setTimeout(() => saveBestTime(timeElapsed), 500); 
-        return;
-    }
-
-    if (!board.includes('')) {
-        messageElement.textContent = '¡Empate!';
-        gameActive = false;
-        return;
-    }
+    
+    return winningCombinations.some(combination =>
+        combination.every(index => board[index].textContent === mark)
+    );
 }
 
-function saveBestTime(timeElapsed) {
-    const playerName = prompt('Ingresa tu nombre para guardar tu tiempo:');
-    if (playerName) {
-        const newRecord = {
-            name: playerName,
-            time: parseFloat(timeElapsed),
-            date: new Date().toLocaleString()
-        };
-        bestTimes.push(newRecord);
-        bestTimes.sort((a, b) => a.time - b.time);  // Ordenar de menor a mayor tiempo
-        if (bestTimes.length > 10) {
-            bestTimes.pop();  // Limitar a 10 los mejores tiempos
-        }
-        localStorage.setItem('bestTimes', JSON.stringify(bestTimes));
-        displayBestTimes();
-    }
+// Verificación de tablero completo
+function isBoardFull() {
+    return Array.from(board).every(cell => cell.textContent);
 }
 
-function displayBestTimes() {
-    bestTimesElement.innerHTML = '';
+// Finalización del juego
+function endGame(winner) {
+    gameOver = true;
+    if (winner === 'Jugador') {
+        let timeTaken = (Date.now() - startTime) / 1000;
+        let playerName = prompt('¡Ganaste! Ingresa tu nombre:');
+        if (playerName) saveBestTime(playerName, timeTaken);
+    }
+    setTimeout(resetGame, 2000);
+}
+
+// Guardar el mejor tiempo en LocalStorage
+function saveBestTime(player, time) {
+    let bestTimes = JSON.parse(localStorage.getItem('bestTimes')) || [];
+    bestTimes.push({ player, time, date: new Date().toLocaleString() });
+    bestTimes.sort((a, b) => a.time - b.time);
+    if (bestTimes.length > 10) bestTimes = bestTimes.slice(0, 10);
+    localStorage.setItem('bestTimes', JSON.stringify(bestTimes));
+    loadBestTimes();
+}
+
+// Cargar y mostrar los mejores tiempos
+function loadBestTimes() {
+    bestTimesList.innerHTML = '';
+    let bestTimes = JSON.parse(localStorage.getItem('bestTimes')) || [];
     bestTimes.forEach(record => {
-        const li = document.createElement('li');
-        li.textContent = `${record.name}: ${record.time} segundos (Fecha: ${record.date})`;
-        bestTimesElement.appendChild(li);
+        let li = document.createElement('li');
+        li.textContent = `${record.player} - ${record.time}s (${record.date})`;
+        bestTimesList.appendChild(li);
     });
 }
 
+// Reinicio del juego
 function resetGame() {
-    board = ['', '', '', '', '', '', '', '', ''];
-    currentPlayer = 'X';
-    gameActive = true;
-    messageElement.textContent = '';
-    startTime = null;
-    cells.forEach(cell => {
+    board.forEach(cell => {
         cell.textContent = '';
-        cell.classList.remove('X', 'O');
+        cell.classList.remove('clicked');
     });
+    playerTurn = true;
+    gameOver = false;
+    startTime = null;
 }
 
-displayBestTimes();  // Mostrar mejores tiempos al cargar la página
